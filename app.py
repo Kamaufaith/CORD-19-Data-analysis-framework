@@ -10,17 +10,50 @@ from wordcloud import WordCloud
 DATA_URL = "https://github.com/Kamaufaith/CORD-19-Data-analysis-framework/releases/download/v1.0/cord19_cleaned.parquet"
 DATA_PATH = "cord19_cleaned.parquet"
 
+def _is_valid_parquet(path: str) -> bool:
+    """Parquet files start and end with b'PAR1'."""
+    try:
+        if not os.path.exists(path) or os.path.getsize(path) < 16:
+            return False
+        with open(path, "rb") as f:
+            head = f.read(4)
+            f.seek(-4, os.SEEK_END)
+            tail = f.read(4)
+        return head == b"PAR1" and tail == b"PAR1"
+    except Exception:
+        return False
+
+def _download_file(url: str, dest: str) -> None:
+    tmp = dest + ".part"
+    # download to temp first, then replace (prevents half-written files)
+    urllib.request.urlretrieve(url, tmp)
+    os.replace(tmp, dest)
+
 @st.cache_data(show_spinner=False)
-def load_data():
-    # Download once (cached)
-    if not os.path.exists(DATA_PATH):
+def load_data() -> pd.DataFrame:
+    # Download (or re-download) if missing/corrupt
+    if not _is_valid_parquet(DATA_PATH):
         with st.spinner("Downloading dataset (first run only)..."):
-            urllib.request.urlretrieve(DATA_URL, DATA_PATH)
+            # remove bad file if present
+            if os.path.exists(DATA_PATH):
+                try:
+                    os.remove(DATA_PATH)
+                except OSError:
+                    pass
+            _download_file(DATA_URL, DATA_PATH)
+
+        # Validate again
+        if not _is_valid_parquet(DATA_PATH):
+            raise RuntimeError(
+                "Downloaded file is not a valid Parquet file. "
+                "This can happen if GitHub served an HTML error/redirect page or the download was interrupted."
+            )
+
     df = pd.read_parquet(
         DATA_PATH,
-        columns=["publish_time", "journal", "title", "source_x"]
-    )  
-  
+        columns=["publish_time", "journal", "title", "source_x"],
+    )
+
     df["publish_time"] = pd.to_datetime(df["publish_time"], errors="coerce")
     df["publish_year"] = df["publish_time"].dt.year.astype("Int16")
     df["journal"] = df["journal"].fillna("Unknown")
