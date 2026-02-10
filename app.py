@@ -1,16 +1,26 @@
 import os
+import urllib.request
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from wordcloud import WordCloud
 
-@st.cache_data(show_spinner=False)
-def load_data(uploaded_file):
-    usecols = ["publish_time", "journal", "title", "source_x"]
-    dtype = {"journal": "string", "title": "string", "source_x": "string"}
-    df = pd.read_csv(uploaded_file, usecols=lambda c: c in usecols, dtype=dtype)
+# -----Parquet dataset settings ---- #
+DATA_URL = "https://github.com/Kamaufaith/CORD-19-Data-analysis-framework/releases/download/v1.0/cord19_cleaned.parquet"
+DATA_PATH = "cord19_cleaned.parquet"
 
+@st.cache_data(show_spinner=False)
+def load_data():
+    # Download once (cached)
+    if not os.path.exists(DATA_PATH):
+        with st.spinner("Downloading dataset (first run only)..."):
+            urllib.request.urlretrieve(DATA_URL, DATA_PATH)
+    df = pd.read_parquet(
+        DATA_PATH,
+        columns=["publish_time", "journal", "title", "source_x"]
+    )  
+  
     df["publish_time"] = pd.to_datetime(df["publish_time"], errors="coerce")
     df["publish_year"] = df["publish_time"].dt.year.astype("Int16")
     df["journal"] = df["journal"].fillna("Unknown")
@@ -18,18 +28,13 @@ def load_data(uploaded_file):
     df["title"] = df["title"].fillna("")
     return df
 
-
-
 st.title("COVID-19 Research Analysis Dashboard 🧬")
 
 st.sidebar.header("Filters & Settings")
-uploaded_file  = st.sidebar.file_uploader("Upload CORD19_cleaned.csv", type=["csv"])
-if uploaded_file is None:
-    st.info("Please upload your cord19_cleaned.csv file in the sidebar to start.")
-    st.stop()
 
-df = load_data(uploaded_file)
-st.sidebar.success("Dataset loaded")
+df = load_data()
+st.sidebar.success("Dataset loaded successfully!")
+
 year_min = int(df["publish_year"].dropna().min())
 year_max = int(df["publish_year"].dropna().max())
 year_range = st.sidebar.slider("Select Publication Year Range:", year_min, year_max, (year_min, year_max))
