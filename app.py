@@ -6,24 +6,30 @@ import seaborn as sns
 from wordcloud import WordCloud
 
 @st.cache_data(show_spinner=False)
-def load_data(path: str):
+def load_data(uploaded_file):
     usecols = ["publish_time", "journal", "title", "source_x"]
     dtype = {"journal": "string", "title": "string", "source_x": "string"}
-    df = pd.read_csv(path, usecols=lambda c: c in usecols, dtype=dtype)
+    df = pd.read_csv(uploaded_file, usecols=lambda c: c in usecols, dtype=dtype)
 
     df["publish_time"] = pd.to_datetime(df["publish_time"], errors="coerce")
     df["publish_year"] = df["publish_time"].dt.year.astype("Int16")
     df["journal"] = df["journal"].fillna("Unknown")
+    
     df["title"] = df["title"].fillna("")
     return df
 
-path = os.path.expanduser("~/Downloads/cord19_cleaned.csv")
-df = load_data(path)
+
 
 st.title("COVID-19 Research Analysis Dashboard 🧬")
 
 st.sidebar.header("Filters & Settings")
+uploaded_file  = st.sidebar.file_uploader("Upload CORD19_cleaned.csv", type=["csv"])
+if uploaded_file is None:
+    st.info("Please upload your cord19_cleaned.csv file in the sidebar to start.")
+    st.stop()
 
+df = load_data(uploaded_file)
+st.sidebar.success("Dataset loaded")
 year_min = int(df["publish_year"].dropna().min())
 year_max = int(df["publish_year"].dropna().max())
 year_range = st.sidebar.slider("Select Publication Year Range:", year_min, year_max, (year_min, year_max))
